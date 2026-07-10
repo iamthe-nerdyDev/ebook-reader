@@ -6,7 +6,7 @@ name: Build desktop apps
 on:
   workflow_dispatch:
   push:
-    tags: ["main"]
+    tags: ["v*"]
 
 jobs:
   build:
