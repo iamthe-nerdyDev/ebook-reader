@@ -1,9 +1,11 @@
 import ePub from "epubjs";
 import * as pdfjsLib from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// Use Vite's ?worker so the pdf.js worker is bundled and instantiated correctly
+// under Tauri's tauri:// protocol (a plain ?url path fails there).
+import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 import type { Format, ParsedBook } from "./types";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 
 export function formatOf(name: string): Format | null {
   const n = name.toLowerCase();
