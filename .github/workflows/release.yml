@@ -1,12 +1,17 @@
 name: Build desktop apps
 
-# Push a version tag (e.g. `git tag v0.1.0 && git push --tags`) to build installers
-# for Windows, macOS (Intel + Apple Silicon) and Linux, and attach them to a draft
-# GitHub Release. You can also run it manually from the Actions tab (build only).
+# Two ways to build installers for Windows, macOS (Intel + Apple Silicon) and Linux:
+#   1) Actions tab → "Build desktop apps" → Run workflow → download from the run's Artifacts.
+#   2) Push a version tag (git tag v0.1.1 && git push origin v0.1.1) → same builds, also
+#      attached to a draft GitHub Release.
 on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+
+# tauri-action creates a GitHub Release, which needs write access to the repo.
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -44,7 +49,7 @@ jobs:
           targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Cache cargo
-        uses: swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
@@ -57,7 +62,7 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Build & release
+      - name: Build (and release on tag)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,3 +72,18 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # Always upload the installers as downloadable run artifacts, so a manual
+      # (workflow_dispatch) run produces files even when there's no tag/Release.
+      - name: Upload installers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-nook-${{ matrix.platform }}-${{ strategy.job-index }}
+          if-no-files-found: ignore
+          path: |
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.exe
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.deb
