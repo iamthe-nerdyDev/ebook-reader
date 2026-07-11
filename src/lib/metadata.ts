@@ -1,12 +1,17 @@
 import ePub from "epubjs";
-import * as pdfjsLib from "pdfjs-dist";
-// Inline the pdf.js worker (base64 → Blob) so it needs NO network/protocol fetch.
-// WKWebView doesn't route worker-script requests through Tauri's tauri:// protocol
-// handler, so any URL-based worker (?url or plain ?worker) fails in the packaged app.
-import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker&inline";
+// LEGACY pdf.js build: the modern build needs Promise.withResolvers (WebKit 17.4+),
+// which Tauri's WKWebView on macOS Ventura doesn't have — getDocument() throws and
+// PDF imports fail in the packaged app. The legacy build polyfills it.
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+// Inline the worker (base64 → Blob): WKWebView doesn't route worker-script requests
+// through Tauri's tauri:// protocol handler, so URL-based workers fail when packaged.
+import PdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline";
 import type { Format, ParsedBook } from "./types";
 
 pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
+
+// Reader.tsx must use this same module instance (same worker + same API version).
+export { pdfjsLib };
 
 export function formatOf(name: string): Format | null {
   const n = name.toLowerCase();

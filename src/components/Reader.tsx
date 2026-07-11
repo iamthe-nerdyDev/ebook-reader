@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ePub from "epubjs";
-import * as pdfjsLib from "pdfjs-dist";
+import { pdfjsLib } from "../lib/metadata"; // shared LEGACY pdf.js instance (WKWebView-safe)
 import { useApp } from "../store";
 import * as repo from "../lib/repo";
 import { loadBookFile } from "../lib/platform";

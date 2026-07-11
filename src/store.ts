@@ -193,6 +193,7 @@ export const useApp = create<AppState>((set, get) => ({
     const existingHashes = repo.existingHashes();
     const seen = new Set<string>();
     let added = 0, dupes = 0;
+    let lastErr: string | null = null;
     for (const f of queue) {
       try {
         const hash = await sha256Hex(f.bytes);            // dedupe identical files by content
@@ -209,7 +210,8 @@ export const useApp = create<AppState>((set, get) => ({
           sourcePath: f.path ?? null, contentHash: hash,
         });
         added++;
-      } catch (e) {
+      } catch (e: any) {
+        lastErr = e?.message || String(e);
         console.error("Failed to import", f.name, e);
       }
     }
@@ -218,7 +220,7 @@ export const useApp = create<AppState>((set, get) => ({
     const dupNote = dupes ? ` · skipped ${dupes} duplicate${dupes > 1 ? "s" : ""}` : "";
     if (added) get().showToast(`Added ${added} book${added > 1 ? "s" : ""}${silent ? " from your watched folder" : ""}${dupNote}`);
     else if (dupes && !silent) get().showToast(`Already in your library — skipped ${dupes} duplicate${dupes > 1 ? "s" : ""}.`);
-    else if (!silent) get().showToast("Couldn’t read those files.");
+    else if (!silent) get().showToast(`Couldn’t read those files.${lastErr ? ` (${lastErr.slice(0, 90)})` : ""}`, 6000);
   },
 
   async manualRefresh() {
