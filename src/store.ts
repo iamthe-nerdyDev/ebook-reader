@@ -3,7 +3,7 @@ import { initDb } from "./lib/db";
 import * as repo from "./lib/repo";
 import { parseBook } from "./lib/metadata";
 import { sha256Hex } from "./lib/hash";
-import { pickFiles, pickFolder, saveBookFile, deleteBookFile, scanFolderPaths, readPaths, isTauri, type PickedFile } from "./lib/platform";
+import { pickFiles, pickFolder, saveBookFile, loadBookFile, deleteBookFile, scanFolderPaths, readPaths, isTauri, type PickedFile } from "./lib/platform";
 import { CATEGORY_COLORS, type Book, type Category, type SortBy } from "./lib/types";
 
 export type View = "library" | "stats" | "highlights" | "bookmarks" | "reader";
@@ -50,7 +50,9 @@ interface AppState {
   startWatching: () => void;
   rescanWatched: () => Promise<void>;
   manualRefresh: () => Promise<void>;
+  dedupeLibrary: () => Promise<void>;
   resetApp: () => Promise<void>;
+  _deduping?: boolean;
   addCategory: (name: string) => void;
   deleteCategory: (id: string) => void;
   setBookCategory: (bookId: string, categoryId: string | null) => void;
@@ -92,6 +94,8 @@ export const useApp = create<AppState>((set, get) => ({
     document.documentElement.setAttribute("data-theme", get().theme);
     get().refresh();
     set({ ready: true });
+    // clean up duplicates from libraries created before content-hashing existed
+    void get().dedupeLibrary();
     if (isTauri) get().startWatching();
   },
 
@@ -218,9 +222,53 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async manualRefresh() {
+    await get().dedupeLibrary();
     get().refresh();
     if (isTauri) { try { await get().rescanWatched(); } catch { /* ignore */ } }
     get().showToast("Refreshed");
+  },
+
+  /** Backfill content hashes for books imported before hashing existed, then
+   *  merge duplicate copies (same bytes) into one — stats/bookmarks/highlights
+   *  are moved onto the copy that's kept. */
+  async dedupeLibrary() {
+    if (get()._deduping) return;
+    set({ _deduping: true });
+    try {
+      // 1) backfill missing hashes from the stored file bytes
+      for (const b of repo.listBooks().filter((x) => !x.contentHash)) {
+        try {
+          const bytes = await loadBookFile(b.id);
+          if (bytes) repo.setContentHash(b.id, await sha256Hex(bytes));
+        } catch { /* skip unreadable file */ }
+      }
+      // 2) group by hash, keep the most-read copy, merge + remove the rest
+      const byHash = new Map<string, Book[]>();
+      for (const b of repo.listBooks()) {
+        if (!b.contentHash) continue;
+        const g = byHash.get(b.contentHash) ?? [];
+        g.push(b); byHash.set(b.contentHash, g);
+      }
+      let removed = 0;
+      for (const group of byHash.values()) {
+        if (group.length < 2) continue;
+        group.sort((a, b) => (b.progress - a.progress) || (a.addedAt - b.addedAt));
+        const keep = group[0];
+        for (const dup of group.slice(1)) {
+          repo.mergeBookData(dup.id, keep.id);
+          repo.deleteBook(dup.id);
+          await deleteBookFile(dup.id);
+          if (get().currentBookId === dup.id) set({ currentBookId: keep.id });
+          removed++;
+        }
+      }
+      if (removed) {
+        get().refresh();
+        get().showToast(`Merged ${removed} duplicate cop${removed > 1 ? "ies" : "y"}`);
+      }
+    } finally {
+      set({ _deduping: false });
+    }
   },
 
   async resetApp() {

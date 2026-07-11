@@ -55,6 +55,15 @@ export function existingHashes(): Set<string> {
   for (const r of query<any>("SELECT content_hash AS h FROM books WHERE content_hash IS NOT NULL")) set.add(r.h);
   return set;
 }
+export function setContentHash(id: string, hash: string) {
+  run("UPDATE books SET content_hash=? WHERE id=?", [hash, id]);
+}
+/** Move a duplicate copy's stats/bookmarks/highlights onto the copy we keep. */
+export function mergeBookData(fromId: string, toId: string) {
+  run("UPDATE sessions SET book_id=? WHERE book_id=?", [toId, fromId]);
+  run("UPDATE bookmarks SET book_id=? WHERE book_id=?", [toId, fromId]);
+  run("UPDATE highlights SET book_id=? WHERE book_id=?", [toId, fromId]);
+}
 export function setBookCategory(id: string, categoryId: string | null) {
   run("UPDATE books SET category_id=? WHERE id=?", [categoryId, id]);
 }

@@ -1,8 +1,9 @@
 import ePub from "epubjs";
 import * as pdfjsLib from "pdfjs-dist";
-// Use Vite's ?worker so the pdf.js worker is bundled and instantiated correctly
-// under Tauri's tauri:// protocol (a plain ?url path fails there).
-import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
+// Inline the pdf.js worker (base64 → Blob) so it needs NO network/protocol fetch.
+// WKWebView doesn't route worker-script requests through Tauri's tauri:// protocol
+// handler, so any URL-based worker (?url or plain ?worker) fails in the packaged app.
+import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker&inline";
 import type { Format, ParsedBook } from "./types";
 
 pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
